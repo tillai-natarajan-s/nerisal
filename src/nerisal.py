@@ -26,6 +26,7 @@ from executorch.runtime import Runtime
 TARGETS = {
     "person": {0: "person"},
     "vehicle": {1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"},
+    "head": {0: "head"},          # our fine-tuned 1-class head models (head320 / head640)
 }
 
 # Fruin walkway Level of Service, by density (persons per m^2): upper bounds
@@ -168,12 +169,54 @@ class Detector:
         return b[k], s[k], c[k], ms
 
 
+class DMCounter:
+    """DM-Count density model (ExecuTorch .pte), run on a grid x grid of tiles.
+    Density maps are additive, so tile counts simply sum: no duplicate merging needed.
+    Returns the count, the full-frame density map (for heat maps / hotspots) and the time."""
+    MEAN = np.array([0.485, 0.456, 0.406], np.float32)
+    STD = np.array([0.229, 0.224, 0.225], np.float32)
+
+    def __init__(self, model_path=None, size=(256, 144), grid=4, method=None):
+        self.method = method or Runtime.get().load_program(model_path).load_method("forward")
+        self.size, self.grid = tuple(size), grid
+        self.label = f"{os.path.basename(model_path or 'dmcount')} {size[0]}x{size[1]} tiles {grid}x{grid}"
+
+    def _run(self, tile):
+        x = cv2.resize(tile, self.size, interpolation=cv2.INTER_AREA)[:, :, ::-1]   # BGR -> RGB
+        x = (x.astype(np.float32) / 255 - self.MEAN) / self.STD
+        x = torch.from_numpy(np.ascontiguousarray(x.transpose(2, 0, 1))).unsqueeze(0)
+        d = self.method.execute([x])[0]
+        return np.asarray(d, dtype=np.float32).reshape(d.shape[-2], d.shape[-1])
+
+    def count(self, img):
+        h, w = img.shape[:2]
+        ys = np.linspace(0, h, self.grid + 1).astype(int)
+        xs = np.linspace(0, w, self.grid + 1).astype(int)
+        dmap = np.zeros((h, w), np.float32)
+        total, t0 = 0.0, time.perf_counter()
+        for i in range(self.grid):
+            for j in range(self.grid):
+                tile = img[ys[i]:ys[i + 1], xs[j]:xs[j + 1]]
+                if tile.size == 0:
+                    continue
+                d = self._run(tile)
+                s = float(d.sum())
+                total += s
+                th, tw = ys[i + 1] - ys[i], xs[j + 1] - xs[j]
+                up = cv2.resize(d, (tw, th), interpolation=cv2.INTER_LINEAR)
+                if up.sum() > 0:
+                    up *= s / up.sum()                 # keep the tile's count exact after resizing
+                dmap[ys[i]:ys[i + 1], xs[j]:xs[j + 1]] = up
+        return total, dmap, (time.perf_counter() - t0) * 1000
+
+
 def annotate(img, boxes, classes, names, label, color, blur_heads):
     h, w = img.shape[:2]
     for (x1, y1, x2, y2), c in zip(boxes.int().tolist(), classes.tolist()):
         x1, y1, x2, y2 = max(0, x1), max(0, y1), min(w, x2), min(h, y2)
-        if blur_heads and names[c] == "person" and x2 > x1 and y2 > y1:
-            hy2 = y1 + max(1, (y2 - y1) // 5)          # top fifth of the body box
+        if blur_heads and names[c] in ("person", "head") and x2 > x1 and y2 > y1:
+            # body box: blur the top fifth; head box: blur the whole box
+            hy2 = y2 if names[c] == "head" else y1 + max(1, (y2 - y1) // 5)
             roi = img[y1:hy2, x1:x2]
             if roi.size:
                 img[y1:hy2, x1:x2] = cv2.GaussianBlur(roi, (31, 31), 0)
