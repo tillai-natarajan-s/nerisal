@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pt
+*.pth
+*.pte
+*.zip
+live_logs/
+live_snaps/
+results_*/
+r_*/
+images/
+wheels*/
+.ipynb_checkpoints/
