@@ -1,0 +1,4 @@
+executorch==1.6.0
+opencv-python-headless
+numpy
+pillow
