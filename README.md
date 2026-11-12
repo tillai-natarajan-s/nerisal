@@ -4,9 +4,5 @@ grades safety A–F and warns before a crowd becomes dangerous. Runs fully offli
 Raspberry Pi with ExecuTorch.
 
 Team Iconic · Chennai Institute of Technology · Namma AI Hackathon 2026
-Team Members:
-    1. Tillai Natarajan S
-    2. Nuha M
-    3. Sarumathi S
     
 > Work in progress for the finale on 14 November 2026.
