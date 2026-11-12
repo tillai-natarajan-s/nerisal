@@ -310,7 +310,7 @@ class Engine:
         self.ema = n if self.ema is None else self.ema + a.smooth * (n - self.ema)
         cnt = int(round(self.ema))
         density = cnt / a.area if a.area else 0.0
-        sat = a.target == "person" and busy and n < a.sat_count
+        sat = a.target in ("person", "head") and busy and n < a.sat_count
         if a.area:
             grade, action = fruin(density)
         else:
@@ -364,9 +364,10 @@ class Engine:
             x1, y1, x2, y2 = max(0, x1), max(0, y1), min(w, x2), min(h, y2)
             if x2 <= x1 or y2 <= y1:
                 continue
-            is_person = cls is None or names.get(int(cls[i]), "") == "person"
+            name = names.get(int(cls[i]), "") if cls is not None else "person"
+            is_person = name in ("person", "head")
             if not self.a.no_blur and is_person:
-                hy = y1 + max(1, (y2 - y1) // 5)
+                hy = y2 if name == "head" else y1 + max(1, (y2 - y1) // 5)   # head box: blur all of it
                 roi = img[y1:hy, x1:x2]
                 if roi.size:
                     img[y1:hy, x1:x2] = cv2.GaussianBlur(roi, (31, 31), 0)
@@ -471,7 +472,8 @@ def main():
     ap.add_argument("--width", type=int, default=640)
     ap.add_argument("--height", type=int, default=480)
     ap.add_argument("--hold", type=float, default=4.0, help="seconds per image in folder mode")
-    ap.add_argument("--target", choices=["person", "vehicle"], default="person")
+    ap.add_argument("--target", choices=["person", "head", "vehicle"], default="person",
+                    help="head = our fine-tuned head models (use --conf 0.15)")
     ap.add_argument("--fast-model", default="yolov8n_320.pte")
     ap.add_argument("--fast-imgsz", type=int, default=320)
     ap.add_argument("--acc-model", default="yolov8n.pte", help="'' to disable escalation")
