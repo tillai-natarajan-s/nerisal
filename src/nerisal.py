@@ -210,6 +210,112 @@ class DMCounter:
         return total, dmap, (time.perf_counter() - t0) * 1000
 
 
+class HybridCounter:
+    """Perspective-aware hybrid: near field detect, far field estimate density.
+
+    1. Tiled head detection (head640, 3x3) finds every clearly visible head.
+    2. Head-box height is fitted against image row (perspective model), so we know
+       how big a head is expected to be anywhere in the frame, even where no head
+       was found.
+    3. The frame is split into cells x cells regions. A region whose detected heads
+       are large (>= hthr x frame width) is counted by the detector. Any other region
+       is counted by DM-Count, run at the scale that makes the expected head about
+       `ht` px in the density model's input (DM-Count is accurate only in that range),
+       and never below the detector's own count there.
+    Density maps are additive, so mixing per region is exact. DM-Count only runs if
+    at least one region needs it."""
+
+    def __init__(self, det, dm_model, dm_size=(432, 240), grids=(1, 2), cells=8,
+                 hthr=0.015, ht=10.0, conf=0.25, det_grid=3):
+        self.det, self.cells, self.hthr, self.ht, self.conf = det, cells, hthr, ht, conf
+        self.det_grid, self.grids, self.dm_w = det_grid, tuple(grids), dm_size[0]
+        method = Runtime.get().load_program(dm_model).load_method("forward")
+        self.dm = {g: DMCounter(None, dm_size, g, method=method) for g in self.grids}
+        self.label = (f"hybrid {det.size}px heads + DM-Count {dm_size[0]}x{dm_size[1]} "
+                      f"grids {'/'.join(map(str, self.grids))}")
+
+    @staticmethod
+    def perspective(b):
+        """Head height (px) as a linear function of image row, robust to outliers."""
+        if len(b) == 0:
+            return lambda y: 0.0
+        cy = (b[:, 1] + b[:, 3]) / 2
+        bh = b[:, 3] - b[:, 1]
+        if len(b) < 4:
+            med = float(np.median(bh))
+            return lambda y: med
+        A = np.vstack([np.ones_like(cy), cy]).T
+        co = np.linalg.lstsq(A, bh, rcond=None)[0]
+        r = np.abs(A @ co - bh)
+        k = r <= np.percentile(r, 80)
+        co = np.linalg.lstsq(A[k], bh[k], rcond=None)[0]
+        lo, hi = max(2.0, float(np.percentile(bh, 5)) * 0.5), float(np.percentile(bh, 95)) * 1.5
+        return lambda y: float(np.clip(co[0] + co[1] * y, lo, max(lo, hi)))
+
+    def count(self, img):
+        """Returns total, kept boxes (torch), full-frame density map, info dict, ms."""
+        t0 = time.perf_counter()
+        h, w = img.shape[:2]
+        b, s, c, _ = self.det.detect(img, tiles=True, grid=self.det_grid)
+        keep = s > self.conf
+        b, s, c = b[keep], s[keep], c[keep]
+        bn = b.numpy().astype(np.float64) if len(b) else np.zeros((0, 4))
+        head_h = self.perspective(bn)
+        cx, cy = (bn[:, 0] + bn[:, 2]) / 2, (bn[:, 1] + bn[:, 3]) / 2
+        bh = bn[:, 3] - bn[:, 1]
+
+        ys = np.linspace(0, h, self.cells + 1).astype(int)
+        xs = np.linspace(0, w, self.cells + 1).astype(int)
+        maps, dmap = {}, np.zeros((h, w), np.float32)
+        total, n_det, n_dm, used, dm_rects = 0.0, 0, 0, {}, []
+        for i in range(self.cells):
+            ph = head_h((ys[i] + ys[i + 1]) / 2)
+            g = min(self.grids, key=lambda g: abs(np.log(max(ph, 1.0) * self.dm_w * g / w / self.ht)))
+            for j in range(self.cells):
+                y0, y1, x0, x1 = ys[i], ys[i + 1], xs[j], xs[j + 1]
+                m = (cx >= x0) & (cx < x1) & (cy >= y0) & (cy < y1)
+                nh = int(m.sum())
+                if nh and float(np.median(bh[m])) / w >= self.hthr:
+                    total += nh; n_det += 1; used["det"] = used.get("det", 0) + 1
+                    for k in np.where(m)[0]:              # 1 person per head, for the heat map
+                        dmap[int(min(cy[k], h - 1)), int(min(cx[k], w - 1))] += 1.0
+                    continue
+                if g not in maps:
+                    maps[g] = self.dm[g].count(img)[1]
+                d = float(maps[g][y0:y1, x0:x1].sum())
+                if nh > d:                                # never below what we can see
+                    total += nh
+                    for k in np.where(m)[0]:
+                        dmap[int(min(cy[k], h - 1)), int(min(cx[k], w - 1))] += 1.0
+                else:
+                    total += d
+                    dmap[y0:y1, x0:x1] += maps[g][y0:y1, x0:x1]
+                    if d >= 0.3:
+                        dm_rects.append((x0 / w, y0 / h, x1 / w, y1 / h))   # density regions: blur these
+                n_dm += 1; used[f"dm{g}"] = used.get(f"dm{g}", 0) + 1
+        info = {"det_cells": n_det, "dm_cells": n_dm, "used": used,
+                "regime": "detector" if n_dm == 0 else ("density" if n_det == 0 else "hybrid"),
+                "heads": len(bn), "dm_rects": dm_rects, "head_h": head_h}
+        return total, b, dmap, info, (time.perf_counter() - t0) * 1000
+
+
+def density_overlay(img, dmap, label, color):
+    """Colour the density map over the image (warm = more people per pixel). Faces are not visible
+    at the blurred heat level, and no boxes are drawn."""
+    h, w = img.shape[:2]
+    k = max(3, (min(h, w) // 40) | 1)
+    d = cv2.GaussianBlur(dmap, (k, k), 0)
+    top = float(np.percentile(d[d > 0], 99)) if (d > 0).any() else 0.0
+    if top > 0:
+        v = np.clip(d / top, 0, 1)
+        heat = cv2.applyColorMap((v * 255).astype(np.uint8), cv2.COLORMAP_INFERNO)
+        alpha = (np.clip((v - 0.12) / 0.5, 0, 1) * 0.6)[..., None]
+        img = (img * (1 - alpha) + heat * alpha).astype(np.uint8)
+    cv2.rectangle(img, (0, 0), (w, 44), (0, 0, 0), -1)
+    cv2.putText(img, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+    return img
+
+
 def annotate(img, boxes, classes, names, label, color, blur_heads):
     h, w = img.shape[:2]
     for (x1, y1, x2, y2), c in zip(boxes.int().tolist(), classes.tolist()):
@@ -302,31 +408,56 @@ def main():
     ap.add_argument("--no-blur", action="store_true")
     ap.add_argument("--tex-thr", type=float, default=0.22, help="saturated if frame edge density >= this...")
     ap.add_argument("--sat-count", type=int, default=15, help="...and fewer than this many people detected")
+    ap.add_argument("--dm", default="", help="DM-Count .pte: count with the density model instead of a detector")
+    ap.add_argument("--dm-size", default="256x144", help="DM-Count input WxH (must match the .pte)")
+    ap.add_argument("--dm-grid", type=int, default=4, help="DM-Count tiles per side")
+    ap.add_argument("--hybrid", default="", help="DM-Count 432x240 .pte: hybrid count with --model head640.pte "
+                    "(near field detected, far field density, chosen per region)")
     ap.add_argument("--out", default="results")
     a = ap.parse_args()
 
     os.makedirs(a.out, exist_ok=True)
-    det = Detector(a.model, a.imgsz, a.conf, a.target)
-    det.run(np.zeros((480, 640, 3), np.uint8))      # warm-up, not timed
+    hyb = None
+    if a.hybrid:
+        det = Detector(a.model, a.imgsz, 0.10, "head")
+        det.run(np.zeros((480, 640, 3), np.uint8))
+        hyb = HybridCounter(det, a.hybrid)
+        hyb.count(np.zeros((480, 640, 3), np.uint8))       # warm-up, not timed
+    elif a.dm:
+        dw, dh = map(int, a.dm_size.lower().split("x"))
+        dm = DMCounter(a.dm, (dw, dh), a.dm_grid)
+        dm.count(np.zeros((480, 640, 3), np.uint8))  # warm-up, not timed
+        det = None
+    else:
+        det = Detector(a.model, a.imgsz, a.conf, a.target)
+        det.run(np.zeros((480, 640, 3), np.uint8))  # warm-up, not timed
 
     rows, times = [], []
     for name, img in frames(a.input, a.every):
         if img is None:
             print(f"skip {name} (unreadable)")
             continue
-        boxes, scores, cls, ms = det.detect(img, tiles=a.tiles, grid=a.grid)
-        n = len(boxes)
-        counts = {}
-        for c in cls.tolist():
-            counts[det.names[c]] = counts.get(det.names[c], 0) + 1
-        breakdown = ", ".join(f"{k}:{v}" for k, v in counts.items()) or "-"
-        weak = det.weak
         tex = texture(img)
-        # Fail-safe: the scene looks packed (busy texture everywhere) but the
-        # detector sees few people -> it is overwhelmed, not the scene empty.
-        sat = a.target == "person" and tex >= a.tex_thr and n < a.sat_count
+        if hyb is not None:                               # hybrid
+            est, boxes, dmap, info, ms = hyb.count(img)
+            n, weak, sat = int(round(est)), 0, False
+            breakdown = f"{info['regime']}: heads {info['heads']}, det cells {info['det_cells']}, dm cells {info['dm_cells']}"
+        elif det is None:                                 # density model
+            est, dmap, ms = dm.count(img)
+            n, breakdown, weak, sat = int(round(est)), "density model", 0, False
+        else:
+            boxes, scores, cls, ms = det.detect(img, tiles=a.tiles, grid=a.grid)
+            n = len(boxes)
+            counts = {}
+            for c in cls.tolist():
+                counts[det.names[c]] = counts.get(det.names[c], 0) + 1
+            breakdown = ", ".join(f"{k}:{v}" for k, v in counts.items()) or "-"
+            weak = det.weak
+            # Fail-safe: the scene looks packed (busy texture everywhere) but the
+            # detector sees few people -> it is overwhelmed, not the scene empty.
+            sat = a.target in ("person", "head") and tex >= a.tex_thr and n < a.sat_count
         density, grade, action, color = "-", "-", "", (255, 255, 255)
-        if a.area and a.target == "person":
+        if a.area and (a.target in ("person", "head") or det is None or hyb is not None):
             d = n / a.area
             grade, action = fruin(d)
             density, color = f"{d:.2f}", GRADE_COLOR[grade]
@@ -337,10 +468,19 @@ def main():
                 grade = "E*"
             action, color = "SATURATED - too dense to count, treat as E or worse", GRADE_COLOR["F"]
         cnt = f">={n}" if sat else f"{n}"
-        label = f"{a.target.upper()}: {cnt}" + (f" | LOS {grade} - {action}" if action else "") + f" | {ms:.0f} ms"
+        what = ("PEOPLE (hybrid)" if hyb is not None else
+                "PEOPLE (density model)" if det is None else a.target.upper())
+        label = f"{what}: {cnt}" + (f" | LOS {grade} - {action}" if action else "") + f" | {ms:.0f} ms"
         out_name = "out_" + os.path.splitext(name)[0] + ".jpg"
-        cv2.imwrite(os.path.join(a.out, out_name),
-                    annotate(img, boxes, cls, det.names, label, color, not a.no_blur))
+        if hyb is not None:
+            out_img = density_overlay(img, dmap, label, color)
+            out_img = annotate(out_img, boxes, torch.zeros(len(boxes), dtype=torch.long), {0: "head"},
+                               label, color, not a.no_blur)
+        elif det is None:
+            out_img = density_overlay(img, dmap, label, color)
+        else:
+            out_img = annotate(img, boxes, cls, det.names, label, color, not a.no_blur)
+        cv2.imwrite(os.path.join(a.out, out_name), out_img)
         times.append(ms)
         rows.append({"name": name, "count": n, "breakdown": breakdown, "density": density,
                      "grade": grade, "ms": f"{ms:.1f}", "weak": weak, "texture": f"{tex:.3f}", "saturated": "YES" if sat else "",
@@ -353,9 +493,13 @@ def main():
         return
     avg = statistics.mean(times)
     summary = {
-        "Model": f"{os.path.basename(a.model)} (ExecuTorch, XNNPACK), input {a.imgsz}px",
-        "Mode": f"seam-aware tiled (full + {a.grid}x{a.grid})" if a.tiles else "single pass",
-        "Target": a.target, "Frames processed": len(times),
+        "Model": (hyb.label if hyb else
+                  f"{os.path.basename(a.dm)} (DM-Count, ExecuTorch, XNNPACK), input {a.dm_size}" if a.dm else
+                  f"{os.path.basename(a.model)} (ExecuTorch, XNNPACK), input {a.imgsz}px"),
+        "Mode": ("perspective-aware hybrid, per region" if hyb else
+                 f"density map, {a.dm_grid}x{a.dm_grid} tiles" if a.dm else
+                 f"seam-aware tiled (full + {a.grid}x{a.grid})" if a.tiles else "single pass"),
+        "Target": "people" if (a.dm or hyb) else a.target, "Frames processed": len(times),
         "Total counted": sum(r["count"] for r in rows),
         "Frames flagged saturated": sum(1 for r in rows if r["saturated"]),
         "Avg inference / frame": f"{avg:.1f} ms",

@@ -1,0 +1,125 @@
+{
+ "device": "Raspberry Pi 5 Model B Rev 1.1",
+ "accuracy": [
+  {
+   "method": "Hybrid: head640 near, DM-Count far",
+   "set": "18 hand-counted Indian photos",
+   "n": 18,
+   "mae": 24.23,
+   "pct": 21.97,
+   "median_pct": 12.02,
+   "bias": 10.29
+  },
+  {
+   "method": "Hybrid: head640_int8 near, DM-Count far",
+   "set": "18 hand-counted Indian photos",
+   "n": 18,
+   "mae": 24.26,
+   "pct": 22.07,
+   "median_pct": 11.76,
+   "bias": 9.59
+  },
+  {
+   "method": "head640, single pass",
+   "set": "18 hand-counted Indian photos",
+   "n": 18,
+   "mae": 32.11,
+   "pct": 28.32,
+   "median_pct": 22.47,
+   "bias": -19.89
+  },
+  {
+   "method": "head640, tiled 3x3",
+   "set": "18 hand-counted Indian photos",
+   "n": 18,
+   "mae": 24.56,
+   "pct": 26.24,
+   "median_pct": 24.67,
+   "bias": 3.67
+  },
+  {
+   "method": "head320, single pass",
+   "set": "18 hand-counted Indian photos",
+   "n": 18,
+   "mae": 37.61,
+   "pct": 40.67,
+   "median_pct": 36.75,
+   "bias": -26.94
+  },
+  {
+   "method": "DM-Count, 4x4 tiles",
+   "set": "18 hand-counted Indian photos",
+   "n": 18,
+   "mae": 47.65,
+   "pct": 51.5,
+   "median_pct": 36.29,
+   "bias": 31.12
+  },
+  {
+   "method": "DM-Count, 2x2 tiles",
+   "set": "18 hand-counted Indian photos",
+   "n": 18,
+   "mae": 45.45,
+   "pct": 50.99,
+   "median_pct": 43.49,
+   "bias": 30.02
+  }
+ ],
+ "speed": [
+  {
+   "model": "head320",
+   "input": "320 \u00d7 320",
+   "ms": 30.0,
+   "fps": 33.28
+  },
+  {
+   "model": "head320_int8",
+   "input": "320 \u00d7 320",
+   "ms": 21.5,
+   "fps": 46.56
+  },
+  {
+   "model": "head640",
+   "input": "640 \u00d7 640",
+   "ms": 144.0,
+   "fps": 6.95
+  },
+  {
+   "model": "head640_int8",
+   "input": "640 \u00d7 640",
+   "ms": 103.5,
+   "fps": 9.67
+  },
+  {
+   "model": "dmcount_qnrf_432x240",
+   "input": "432 \u00d7 240",
+   "ms": 767.4,
+   "fps": 1.3
+  },
+  {
+   "model": "dmcount_qnrf_256x144",
+   "input": "256 \u00d7 144",
+   "ms": 291.6,
+   "fps": 3.43
+  },
+  {
+   "model": "Hybrid: head640 near, DM-Count far",
+   "input": "full pipeline, per image",
+   "ms": 3929.2,
+   "fps": 0.25
+  },
+  {
+   "model": "Hybrid: head640_int8 near, DM-Count far",
+   "input": "full pipeline, per image",
+   "ms": 3526.5,
+   "fps": 0.28
+  },
+  {
+   "model": "head640, tiled 3x3",
+   "input": "full pipeline, per image",
+   "ms": 1733.3,
+   "fps": 0.58
+  }
+ ],
+ "notes": "Average error is the mean absolute difference from the true count. All numbers measured by tools/benchmark.py and tools/speed_ladder.py."
+}

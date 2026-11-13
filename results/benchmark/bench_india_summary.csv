@@ -1,0 +1,21 @@
+method,band,n,MAE,RMSE,mean_pct_err,median_pct_err,bias,avg_ms
+yolo head640.pte @640 single,ALL,18,32.11,56.99,28.32,22.47,-19.89,150.2
+yolo head640.pte @640 single,light (<25),6,2.17,2.8,14.84,7.49,-2.17,150.2
+yolo head640.pte @640 single,medium (25-99),7,14.29,18.55,23.85,33.67,-13.71,150.2
+yolo head640.pte @640 single,dense (100+),5,93.0,105.84,50.77,55.52,-49.8,150.2
+yolo head640.pte @640 tiled 3x3,ALL,18,24.56,48.09,26.24,24.67,3.67,1733.3
+yolo head640.pte @640 tiled 3x3,light (<25),6,4.17,4.49,25.1,26.05,2.5,1733.3
+yolo head640.pte @640 tiled 3x3,medium (25-99),7,9.14,10.69,20.33,15.56,0.57,1733.3
+yolo head640.pte @640 tiled 3x3,dense (100+),5,70.6,90.23,35.88,43.17,9.4,1733.3
+yolo head320.pte @320 single,ALL,18,37.61,59.55,40.67,36.75,-26.94,33.2
+yolo head320.pte @320 single,light (<25),6,5.67,7.44,31.83,26.07,-5.67,33.2
+yolo head320.pte @320 single,medium (25-99),7,25.14,30.12,40.78,37.78,-25.14,33.2
+yolo head320.pte @320 single,dense (100+),5,93.4,106.9,51.14,58.99,-55.0,33.2
+dmcount dmcount_qnrf_256x144.pte tiles 4x4,ALL,18,47.65,79.12,51.5,36.29,31.12,4271.7
+dmcount dmcount_qnrf_256x144.pte tiles 4x4,light (<25),6,5.89,6.85,31.6,31.88,0.61,4271.7
+dmcount dmcount_qnrf_256x144.pte tiles 4x4,medium (25-99),7,38.81,55.53,69.02,38.05,29.09,4271.7
+dmcount dmcount_qnrf_256x144.pte tiles 4x4,dense (100+),5,110.14,134.76,50.84,47.16,70.57,4271.7
+dmcount dmcount_qnrf_432x240.pte tiles 2x2,ALL,18,45.45,73.92,50.99,43.49,30.02,2953.7
+dmcount dmcount_qnrf_432x240.pte tiles 2x2,light (<25),6,6.36,7.06,36.43,39.15,0.58,2953.7
+dmcount dmcount_qnrf_432x240.pte tiles 2x2,medium (25-99),7,33.3,50.68,59.93,36.53,27.45,2953.7
+dmcount dmcount_qnrf_432x240.pte tiles 2x2,dense (100+),5,109.38,126.55,55.94,59.63,68.94,2953.7

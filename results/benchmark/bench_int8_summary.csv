@@ -1,0 +1,9 @@
+method,band,n,MAE,RMSE,mean_pct_err,median_pct_err,bias,avg_ms
+hybrid head640.pte + dmcount_qnrf_432x240.pte,ALL,18,24.23,46.63,21.97,12.02,10.29,3929.2
+hybrid head640.pte + dmcount_qnrf_432x240.pte,light (<25),6,2.04,3.04,11.51,5.88,1.31,3929.2
+hybrid head640.pte + dmcount_qnrf_432x240.pte,medium (25-99),7,8.79,14.05,21.31,5.22,2.74,3929.2
+hybrid head640.pte + dmcount_qnrf_432x240.pte,dense (100+),5,72.48,86.84,35.47,33.4,31.65,3929.2
+hybrid head640_int8.pte + dmcount_qnrf_432x240.pte,ALL,18,24.26,45.67,22.07,11.76,9.59,3526.5
+hybrid head640_int8.pte + dmcount_qnrf_432x240.pte,light (<25),6,1.97,3.01,11.26,4.89,1.47,3526.5
+hybrid head640_int8.pte + dmcount_qnrf_432x240.pte,medium (25-99),7,9.4,14.4,21.66,5.44,1.56,3526.5
+hybrid head640_int8.pte + dmcount_qnrf_432x240.pte,dense (100+),5,71.82,84.91,35.62,34.38,30.59,3526.5

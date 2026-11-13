@@ -57,11 +57,30 @@ vcgencmd measure_temp     # check for thermal throttling during long runs
 sudo shutdown now         # always shut down before unplugging
 ```
 
-## Expected speed (measured, our Pi 5, YOLOv8n)
-| Model | ms / frame |
-|---|---|
-| 320 px single pass | 31 |
-| 640 px single pass | 147 |
-| 640 px tiled 3×3 | 1,467 |
+## 6. Run the live monitor
+```bash
+cd ~/nerisal && source ~/et/bin/activate
+python nerisal_live.py --source rpicam --line 0.6
+```
+Open `http://<pi-ip>:8000`, press **C**, click the four corners of a measured floor square (near left, near right,
+far right, far left) and enter its size. INT8 head models are used automatically when present.
+Mount the camera about 2–2.5 m high, angled 30–45° down, not straight down.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--line 0.6` | off | counting line at 60% of the frame height |
+| `--area 25` | none | floor area in m² if you skip calibration (average density only) |
+| `--esc-every 4` | 4 s | rest between accurate passes (raise on a Pi 4) |
+| `--hot-temp 76` | 76 °C | above this, the accurate tier slows down |
+| `--fp32` | off | use FP32 head models even if INT8 ones exist |
+
+## Expected speed (measured, our Pi 5)
+| Model | FP32 | INT8 |
+|---|---|---|
+| head320 | 29.4 ms | 21.2 ms |
+| head640 | 141.4 ms | 100.9 ms |
+| DM-Count 432×240, per tile | 720 ms | – |
+| Live view while the accurate tier runs | – | about 11 frames per second |
+| Hybrid accurate count | – | 3.5 s alone, about 8.7 s alongside the live view |
 
 A Pi 4 (Cortex-A72) is expected to be roughly 2–3× slower; `setup.sh` measures the real numbers.

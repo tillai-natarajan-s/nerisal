@@ -84,8 +84,27 @@ class DMMethod:
         return c, ms
 
 
+class HybridMethod:
+    """hybrid:<head.pte>:<dm432x240.pte>[:<cells>]   perspective-aware head + DM-Count"""
+    def __init__(self, spec):
+        from nerisal import Detector, HybridCounter
+        parts = spec.split(":")
+        det = Detector(parts[1], 640, 0.10, "head")
+        det.run(np.zeros((480, 640, 3), np.uint8))
+        cells = int(parts[3]) if len(parts) > 3 else 8
+        self.h = HybridCounter(det, parts[2], cells=cells)
+        self.h.count(np.zeros((480, 640, 3), np.uint8))
+        self.name = f"hybrid {os.path.basename(parts[1])} + {os.path.basename(parts[2])}"
+
+    def __call__(self, img):
+        total, _, _, _, ms = self.h.count(img)
+        return total, ms
+
+
 def make_method(spec):
     kind = spec.split(":")[0]
+    if kind == "hybrid":
+        return HybridMethod(spec)
     if kind == "yolo":
         return YoloMethod(spec)
     if kind == "dm":

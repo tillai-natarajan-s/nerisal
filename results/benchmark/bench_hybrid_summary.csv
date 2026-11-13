@@ -1,0 +1,9 @@
+method,band,n,MAE,RMSE,mean_pct_err,median_pct_err,bias,avg_ms
+yolo head640.pte @640 tiled 3x3,ALL,18,24.56,48.09,26.24,24.67,3.67,1725.6
+yolo head640.pte @640 tiled 3x3,light (<25),6,4.17,4.49,25.1,26.05,2.5,1725.6
+yolo head640.pte @640 tiled 3x3,medium (25-99),7,9.14,10.69,20.33,15.56,0.57,1725.6
+yolo head640.pte @640 tiled 3x3,dense (100+),5,70.6,90.23,35.88,43.17,9.4,1725.6
+hybrid head640.pte + dmcount_qnrf_432x240.pte,ALL,18,24.23,46.63,21.97,12.02,10.29,3801.7
+hybrid head640.pte + dmcount_qnrf_432x240.pte,light (<25),6,2.04,3.04,11.51,5.88,1.31,3801.7
+hybrid head640.pte + dmcount_qnrf_432x240.pte,medium (25-99),7,8.79,14.05,21.31,5.22,2.74,3801.7
+hybrid head640.pte + dmcount_qnrf_432x240.pte,dense (100+),5,72.48,86.84,35.47,33.4,31.65,3801.7

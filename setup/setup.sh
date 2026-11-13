@@ -38,8 +38,9 @@ if [ -d "$WH" ]; then
   echo "  installing OFFLINE from $WH"
   pip install --no-index --find-links "$WH" $PKGS
 else
-  echo "  no wheels$PYV folder, installing from internet"
-  pip install $PKGS
+  echo "  no wheels$PYV folder, installing from internet (slow networks: resumes after drops)"
+  pip install --timeout 120 --retries 10 --resume-retries 20 $PKGS || \
+    pip install --timeout 120 --retries 10 $PKGS        # older pip without --resume-retries
 fi
 
 echo "== 4. Checks =="
@@ -52,11 +53,13 @@ for m in ("numpy", "cv2", "torch", "torchvision", "executorch.runtime"):
         print(f"  !!  {m}: {e}")
 EOF
 cd "$WORK"
-if [ -f yolov8n_320.pte ]; then
+if ls head*.pte >/dev/null 2>&1; then
   python - <<'EOF'
-import time, numpy as np, torch
+import os, time, numpy as np, torch
 from executorch.runtime import Runtime
-for name, s in (("yolov8n_320.pte", 320), ("yolov8n.pte", 640)):
+for name, s in (("head320_int8.pte", 320), ("head640_int8.pte", 640), ("head320.pte", 320), ("head640.pte", 640)):
+    if not os.path.exists(name):
+        continue
     try:
         m = Runtime.get().load_program(name).load_method("forward")
         x = torch.rand(1, 3, s, s); m.execute([x])
@@ -75,5 +78,7 @@ if command -v rpicam-hello >/dev/null; then
 fi
 echo
 echo "Next:  cd $WORK && source $VENV/bin/activate"
-echo "       python nerisal_live.py --source rpicam --area 20 --line 0.6     (Pi camera)"
-echo "       python nerisal_live.py --source 0 --area 20 --line 0.6          (USB camera)"
+echo "       python nerisal_live.py --source rpicam --line 0.6                      (Pi camera)"
+echo "       python nerisal_live.py --source 0 --line 0.6                           (USB camera)"
+echo "       python nerisal_live.py --source http://PHONE-IP:8080/video --line 0.6  (phone, IP Webcam app)"
+echo "       then open http://$(hostname -I | awk '{print $1}'):8000 and press C to calibrate the floor"
