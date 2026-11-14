@@ -1,0 +1,106 @@
+NERISAL - run the dashboard on a monitor connected to the Pi (no laptop needed)
+Team Iconic · Pi IP today: 10.141.143.102
+===============================================================================
+
+WHAT YOU NEED
+- micro-HDMI to HDMI cable, in the Pi's HDMI port nearest the USB-C power port (HDMI 0)
+- USB keyboard + mouse (only for setup and calibration)
+- USB webcam in a blue USB port
+- a fan pointed at the Pi if possible
+
+
+-------------------------------------------------------------------------------
+STEP 1 - Plug in the monitor and reboot the Pi (run over SSH from the laptop)
+-------------------------------------------------------------------------------
+sudo reboot
+
+  -> Desktop with taskbar appears on the monitor: go to STEP 2
+  -> Only text / black screen: the SD card has no desktop. Use the laptop instead.
+
+
+-------------------------------------------------------------------------------
+STEP 2 - Create the one-click start script (once, over SSH from the laptop)
+         Copy everything from "cat" down to "chmod" in one go.
+-------------------------------------------------------------------------------
+ssh teamiconic@10.141.143.102
+
+cat > ~/start_nerisal.sh <<'EOF'
+#!/bin/bash
+# Start the NERISAL engine, then open the dashboard full screen on the Pi's monitor.
+cd ~/nerisal && source ~/et/bin/activate
+pkill -f nerisal_live.py; sleep 1
+python nerisal_live.py --source 0 --area 15 --stream-w 800 > ~/nerisal/live.log 2>&1 &
+echo "Engine starting... waiting 25 s for the models to load"
+sleep 25
+B=$(command -v chromium || command -v chromium-browser)
+$B --kiosk --noerrdialogs --disable-infobars --password-store=basic http://localhost:8000
+EOF
+chmod +x ~/start_nerisal.sh
+
+cat > ~/stop_nerisal.sh <<'EOF'
+#!/bin/bash
+pkill -f nerisal_live.py
+pkill -f chromium
+echo "NERISAL stopped"
+EOF
+chmod +x ~/stop_nerisal.sh
+
+
+-------------------------------------------------------------------------------
+STEP 3 - Start it
+-------------------------------------------------------------------------------
+Option A - on the Pi itself (keyboard + mouse): open Terminal on the desktop and type
+    ~/start_nerisal.sh
+
+Option B - from the laptop over SSH (the dashboard still opens on the Pi's monitor)
+    WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0 ~/start_nerisal.sh
+
+After about 25 s the dashboard opens full screen on the monitor.
+Leave full screen / close the browser:  Alt+F4
+
+
+-------------------------------------------------------------------------------
+STEP 4 - Stop it
+-------------------------------------------------------------------------------
+~/stop_nerisal.sh
+
+
+-------------------------------------------------------------------------------
+USEFUL CHECKS (over SSH)
+-------------------------------------------------------------------------------
+tail -n 20 ~/nerisal/live.log        # engine messages / errors
+vcgencmd measure_temp                # Pi temperature (keep below ~76 C)
+ls /dev/video*                       # webcam present? (video0)
+hostname -I                          # Pi IP address
+
+
+-------------------------------------------------------------------------------
+VARIANTS (edit the "python nerisal_live.py ..." line in ~/start_nerisal.sh)
+-------------------------------------------------------------------------------
+Edit the script:   nano ~/start_nerisal.sh      (save: Ctrl+O, Enter; exit: Ctrl+X)
+
+  Photo slideshow instead of webcam:
+    python nerisal_live.py --source india_set --hold 12 --area 200 --stream-w 800 > ~/nerisal/live.log 2>&1 &
+  Video file on the Pi:
+    python nerisal_live.py --source crowd.mp4 --area 50 --stream-w 800 > ~/nerisal/live.log 2>&1 &
+  Pi getting hot (above 75 C): add  --esc-every 4
+  Webcam is not video0: change --source 0 to --source 1
+
+
+-------------------------------------------------------------------------------
+IF SOMETHING GOES WRONG
+-------------------------------------------------------------------------------
+Dashboard page says "can't connect"   -> engine not up yet: wait 10 s and press F5
+                                         or check: tail -n 20 ~/nerisal/live.log
+"Cannot open camera 0"                 -> pkill -f nerisal_live.py ; replug webcam ; ls /dev/video*
+Browser does not open from SSH         -> use Option A (Terminal on the Pi desktop)
+New version misbehaves                 -> cp ~/backup_working_2/* ~/nerisal/   (or ~/backup_working_1140/)
+Spoken voice silent on the Pi          -> the beep still works through the monitor speakers;
+                                         keep the laptop dashboard open for the spoken alarm
+
+
+-------------------------------------------------------------------------------
+LAPTOP BACKUP (always keep this ready)
+-------------------------------------------------------------------------------
+The same dashboard also works on the laptop at the same time:
+    http://10.141.143.102:8000
