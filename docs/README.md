@@ -1,6 +1,7 @@
 # Documents
 
-- `NERISAL_round1_proposal.pdf`: proposal-round submission (problem, approach, round-one results).
-- `architecture.png`: system pipeline diagram (to be added).
-- `demo.gif`: short dashboard demo (to be added).
-- Finale pitch material (to be added after 14 November 2026).
+| File | Contents |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | How the parts fit together, key design decisions, endpoints |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Installing a unit at a site: camera mounting, settings per site, auto-start, offline viewing |
+| [PRIVACY.md](PRIVACY.md) | What happens to images, what NERISAL never does, responsible use |
