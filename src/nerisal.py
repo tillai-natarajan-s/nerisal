@@ -226,8 +226,9 @@ class HybridCounter:
     at least one region needs it."""
 
     def __init__(self, det, dm_model, dm_size=(432, 240), grids=(1, 2), cells=8,
-                 hthr=0.015, ht=10.0, conf=0.25, det_grid=3):
+                 hthr=0.015, ht=10.0, conf=0.25, det_grid=3, close_frac=0.15):
         self.det, self.cells, self.hthr, self.ht, self.conf = det, cells, hthr, ht, conf
+        self.close_frac = close_frac
         self.det_grid, self.grids, self.dm_w = det_grid, tuple(grids), dm_size[0]
         method = Runtime.get().load_program(dm_model).load_method("forward")
         self.dm = {g: DMCounter(None, dm_size, g, method=method) for g in self.grids}
@@ -264,6 +265,9 @@ class HybridCounter:
         cx, cy = (bn[:, 0] + bn[:, 2]) / 2, (bn[:, 1] + bn[:, 3]) / 2
         bh = bn[:, 3] - bn[:, 1]
 
+        # close-up scene (large heads everywhere): the density model would read walls and posters as
+        # distant crowd, so count only what the detector sees
+        close_up = len(bh) > 0 and float(np.median(bh)) / w >= self.close_frac
         ys = np.linspace(0, h, self.cells + 1).astype(int)
         xs = np.linspace(0, w, self.cells + 1).astype(int)
         maps, dmap = {}, np.zeros((h, w), np.float32)
@@ -275,7 +279,7 @@ class HybridCounter:
                 y0, y1, x0, x1 = ys[i], ys[i + 1], xs[j], xs[j + 1]
                 m = (cx >= x0) & (cx < x1) & (cy >= y0) & (cy < y1)
                 nh = int(m.sum())
-                if nh and float(np.median(bh[m])) / w >= self.hthr:
+                if close_up or (nh and float(np.median(bh[m])) / w >= self.hthr):
                     total += nh; n_det += 1; used["det"] = used.get("det", 0) + 1
                     for k in np.where(m)[0]:              # 1 person per head, for the heat map
                         dmap[int(min(cy[k], h - 1)), int(min(cx[k], w - 1))] += 1.0

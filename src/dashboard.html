@@ -64,6 +64,7 @@ svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-widt
   border:1px solid var(--line-2);border-radius:var(--r-2);background:transparent;cursor:pointer;
   font-size:14px;white-space:nowrap}
 .btn:hover{background:var(--surface-2)}
+.btn[hidden]{display:none}
 .btn[aria-pressed="true"]{background:var(--surface-2);border-color:var(--ink-3)}
 .btn.solid{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600}
 .btns{display:flex;gap:var(--s2);flex-wrap:wrap}
@@ -161,7 +162,7 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.7fr) minm
 .chart .read{position:absolute;top:2px;left:48px;font-size:13px;color:var(--ink-2);pointer-events:none}
 
 /* ---------------------------------------------------------------- events */
-.events{display:flex;flex-direction:column;flex:1 1 0;min-height:120px}
+.events{display:flex;flex-direction:column;flex:1 1 0;min-height:0;overflow:hidden}
 .events ol{list-style:none;margin:var(--s1) 0 0;padding:0 var(--s4) var(--s2);overflow:auto;flex:1;min-height:0}
 .events li{display:grid;grid-template-columns:64px 1fr;gap:var(--s3);padding:7px 0;border-top:1px solid var(--line);
   font-size:14px}
@@ -232,6 +233,12 @@ body.stale .aspect,body.stale .chart,body.stale .events{opacity:.55}
 .dim{opacity:.45}
 
 /* ------------------------------------------------------------ responsive */
+@media (max-width:1700px){
+  #bSnap .lbl,#bHeat .lbl,#bRes .lbl,#bSound .lbl{display:none}
+  #bSnap,#bHeat,#bRes,#bSound{padding:0 10px}
+  .btns{flex-wrap:nowrap}
+  .src{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
 @media (max-width:1200px){
   main{grid-template-columns:minmax(0,1.5fr) minmax(330px,1fr)}
   .slab .letter{font-size:100px}
@@ -272,10 +279,14 @@ body.stale .aspect,body.stale .chart,body.stale .events{opacity:.55}
   <div class="grow"></div>
   <div class="clock num" id="clock" aria-label="Local time"></div>
   <div class="btns">
-    <button class="btn" id="bSnap" title="Save snapshot (S)"><svg class="i" viewBox="0 0 16 16"><rect x="1.5" y="4" width="13" height="9.5" rx="1"/><path d="M5.5 4l1.2-2h2.6l1.2 2"/><circle cx="8" cy="8.7" r="2.4"/></svg><span class="lbl">Save snapshot</span></button>
+    <button class="btn solid" id="bLive" hidden title="Return to the live camera"><svg class="i" viewBox="0 0 16 16"><path d="M1.5 4.5h9v7h-9z"/><path d="M10.5 7l4-2.5v7l-4-2.5"/></svg><span class="lbl">Back to camera</span></button>
+    <button class="btn" id="bFile" title="Test a photo or video from this computer"><svg class="i" viewBox="0 0 16 16"><path d="M8 11V2.5M4.5 6L8 2.5 11.5 6"/><path d="M2 10.5v3h12v-3"/></svg><span class="lbl">Test a file</span></button>
+    <input type="file" id="fileIn" accept="image/*,video/*" hidden>
+    <button class="btn" id="bSound" aria-pressed="false" title="Spoken alarm on this computer (A)" aria-label="Spoken alarm"><svg class="i" viewBox="0 0 16 16"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13 3.5a6 6 0 0 1 0 9"/></svg><span class="lbl">Sound alarm</span></button>
+    <button class="btn" id="bSnap" title="Save snapshot (S)" aria-label="Save snapshot"><svg class="i" viewBox="0 0 16 16"><rect x="1.5" y="4" width="13" height="9.5" rx="1"/><path d="M5.5 4l1.2-2h2.6l1.2 2"/><circle cx="8" cy="8.7" r="2.4"/></svg><span class="lbl">Save snapshot</span></button>
     <button class="btn" id="bCal" title="Calibrate floor (C)"><svg class="i" viewBox="0 0 16 16"><path d="M2 12l3-8h6l3 8z"/><path d="M8 4v8M3.6 8h8.8"/></svg><span class="lbl">Calibrate floor</span></button>
-    <button class="btn" id="bHeat" aria-pressed="true" title="Heat map (H)"><svg class="i" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="4" height="4"/><rect x="6" y="1.5" width="4" height="4"/><rect x="10.5" y="1.5" width="4" height="4"/><rect x="1.5" y="6" width="4" height="4"/><rect x="6" y="6" width="4" height="4" fill="currentColor"/><rect x="10.5" y="6" width="4" height="4"/><rect x="1.5" y="10.5" width="4" height="4"/><rect x="6" y="10.5" width="4" height="4"/><rect x="10.5" y="10.5" width="4" height="4"/></svg><span class="lbl">Heat map</span></button>
-    <button class="btn" id="bRes" title="Measured results (R)"><svg class="i" viewBox="0 0 16 16"><path d="M2 14V2M2 14h12"/><path d="M5 11V8M8 11V5M11 11V7"/></svg><span class="lbl">Results</span></button>
+    <button class="btn" id="bHeat" aria-pressed="true" title="Heat map (H)" aria-label="Heat map"><svg class="i" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="4" height="4"/><rect x="6" y="1.5" width="4" height="4"/><rect x="10.5" y="1.5" width="4" height="4"/><rect x="1.5" y="6" width="4" height="4"/><rect x="6" y="6" width="4" height="4" fill="currentColor"/><rect x="10.5" y="6" width="4" height="4"/><rect x="1.5" y="10.5" width="4" height="4"/><rect x="6" y="10.5" width="4" height="4"/><rect x="10.5" y="10.5" width="4" height="4"/></svg><span class="lbl">Heat map</span></button>
+    <button class="btn" id="bRes" title="Measured results (R)" aria-label="Measured results"><svg class="i" viewBox="0 0 16 16"><path d="M2 14V2M2 14h12"/><path d="M5 11V8M8 11V5M11 11V7"/></svg><span class="lbl">Results</span></button>
     <button class="btn" id="bTheme" title="Light or dark (T)" aria-label="Switch light or dark"><svg class="i" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11a5.5 5.5 0 0 0 0-11z" fill="currentColor"/></svg></button>
     <button class="btn" id="bKeys" title="Keyboard shortcuts" aria-label="Keyboard shortcuts" aria-expanded="false">?</button>
   </div>
@@ -360,7 +371,7 @@ body.stale .aspect,body.stale .chart,body.stale .events{opacity:.55}
         </div>
       </div>
       <div class="scale"><svg id="scale" viewBox="0 0 400 36" preserveAspectRatio="none" aria-label="Density on the Fruin scale"></svg></div>
-      <div class="note" id="calNote">Floor area is an estimate. <button id="calLink">Calibrate the floor</button> to measure real square metres.</div>
+      <div class="note" id="calNote"><span id="calMsg">Floor area is an estimate.</span> <button id="calLink">Calibrate the floor</button> to measure real square metres.</div>
     </div>
 
     <div class="flow" id="flow">
@@ -393,6 +404,8 @@ body.stale .aspect,body.stale .chart,body.stale .events{opacity:.55}
 <aside class="drawer" id="drawer" aria-label="Measured results" aria-hidden="true">
   <header><h2>Measured results</h2><button class="btn" id="bClose">Close</button></header>
   <div class="body" id="proof"><p class="quiet">Loading results.</p></div>
+  <div class="body"><h3>Incidents</h3><p class="quiet">Every time the grade reaches E or F, the device records when it started and ended, the worst density and a blurred snapshot.</p>
+  <p><a class="btn" href="/report" target="_blank" rel="noopener">Open the incident report</a></p></div>
 </aside>
 <div class="toast" id="toast" role="status"></div>
 
@@ -417,6 +430,7 @@ const REGIME = {light:"Light", medium:"Medium", dense:"Dense", unknown:"Unclear"
 /* ================================================================ state */
 const state = {
   s:null, fails:0, lastOk:0, heat:true, alertAck:false, alertKey:"", prevGrade:null,
+  sound:false, spokeKey:"", spokeAt:0,
   events:[], proof:null, calib:null, calPts:[], drawerOpen:false, belowSince:0
 };
 const $ = id => document.getElementById(id);
@@ -511,7 +525,10 @@ const render = {
     util.set("avg", util.n(avg, 2)); util.set("peak", util.n(peak, 2));
     $("peak").closest(".pair > div").classList.toggle("dim", !util.ok(peak));
     $("peakChip").style.background = util.ok(s.peak_grade) ? util.gColor(s.peak_grade) : "var(--line-2)";
-    util.set("avgK", util.ok(s.area) && s.area > 0 ? `Average over ${util.n(s.area, s.area % 1 ? 1 : 0)} m²` : "Average over the area");
+    util.set("avgK", util.ok(s.area) && s.area > 0
+      ? `Average over ${util.n(s.area, s.area >= 10 ? 0 : 1)} m²${s.calib_mode === "auto" ? ", measured automatically" : ""}`
+      : "Average over the area");
+    util.set("calMsg", s.calib_status ? `Measuring the floor automatically: ${s.calib_status}.` : "Floor area is an estimate.");
     $("calNote").classList.toggle("on", s.calibrated === false);
     draw.scale(avg, peak);
   },
@@ -545,6 +562,7 @@ const render = {
     t.className = !util.ok(s.cpu_temp) ? "" : s.cpu_temp >= 80 ? "alert" : s.cpu_temp >= 75 ? "warn" : "";
     util.set("sUp", util.clock(s.uptime));
     if (s.source) util.set("src", s.source);
+    $("bLive").hidden = !s.upload;
   },
 
   events(s){
@@ -577,6 +595,9 @@ const render = {
         : worst !== g ? `The densest spot is grade ${worst}. ${s.action || ""}` : `Grade ${worst}. ${s.action || ""}`;
       util.set("alertTxt", txt.trim());
       $("alertbar").classList.toggle("on", !state.alertAck);
+      if (state.sound && !state.alertAck && (key !== state.spokeKey || Date.now() - state.spokeAt > 30000)) {
+        state.spokeKey = key; state.spokeAt = Date.now(); sound.announce(s, worst, g);
+      }
     } else {
       if (!state.belowSince) state.belowSince = Date.now();
       if (Date.now() - state.belowSince > 10000) { $("alertbar").classList.remove("on"); state.alertKey = ""; }
@@ -604,6 +625,36 @@ const render = {
       <h3>Speed on the device</h3>
       ${spd.length ? `<table><thead><tr><th>Model</th><th>Input</th><th class="n">ms per frame</th><th class="n">Frames per s</th></tr></thead><tbody>${spdRows}</tbody></table>` : `<p class="quiet">No speed results yet.</p>`}
       ${p.notes ? `<p class="quiet">${esc(p.notes)}</p>` : ""}`;
+  }
+};
+/* spoken alarm: runs on the computer showing the dashboard (the Pi 5 has no audio jack) */
+const sound = {
+  ctx:null,
+  beep(){
+    try {
+      this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)();
+      const c = this.ctx, t0 = c.currentTime;
+      [[880, 0], [660, .3], [880, .6], [660, .9]].forEach(([f, d]) => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.frequency.value = f; o.type = "square"; g.gain.value = .08;
+        o.connect(g); g.connect(c.destination); o.start(t0 + d); o.stop(t0 + d + .25);
+      });
+    } catch (e) {}
+  },
+  say(text){
+    try {
+      if (!window.speechSynthesis) return;
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text); u.rate = .95; u.lang = "en-IN";
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  },
+  announce(s, worst, g){
+    const text = s.saturated ? "Attention. The crowd is too dense to count. Treat it as grade E or worse."
+      : worst === "F" && g === "F" ? "Critical. Crowd density grade F. Crush risk. Intervene now."
+      : worst !== g ? `Attention. One area has reached grade ${worst}. Thin out the crowd near the marked spot.`
+      : "Attention. Crowd density has reached grade E. Hold entry and open an extra exit.";
+    this.beep(); setTimeout(() => this.say(text), 1300);
   }
 };
 function esc(t){ return String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
@@ -856,6 +907,31 @@ $("calImg").onload = cal.draw;
 $("bHeat").onclick = () => { state.heat = !state.heat; $("bHeat").setAttribute("aria-pressed", String(state.heat)); util.store("nerisal-heat", state.heat ? "1" : "0"); draw.overlay(); };
 $("bRes").onclick = () => openDrawer(true); $("bClose").onclick = () => openDrawer(false); $("veil").onclick = () => openDrawer(false);
 $("bTheme").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+/* test a photo or video from this computer: it is uploaded to the device and counted there */
+$("bFile").onclick = () => $("fileIn").click();
+$("fileIn").onchange = async () => {
+  const f = $("fileIn").files[0]; $("fileIn").value = "";
+  if (!f) return;
+  if (f.size > 300 * 1024 * 1024) { toast("That file is over 300 MB. Choose a shorter clip."); return; }
+  toast(`Uploading ${f.name}…`);
+  try {
+    const r = await fetch("/upload", {method:"POST", body:f,
+      headers:{"Content-Type":"application/octet-stream", "X-Filename":encodeURIComponent(f.name)}});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(r.status === 404 ? "This device does not support file testing yet." : (j.error || "The device answered " + r.status + "."));
+    toast(`Now counting ${f.name}. Use Back to camera to return.`);
+  } catch (e) { toast(e.message || "Upload failed. Check the device is connected."); }
+};
+$("bLive").onclick = async () => {
+  try { await api.post("/source", {live:true}); toast("Back to the live camera"); }
+  catch (e) { toast("Could not switch back. Check the device is connected."); }
+};
+$("bSound").onclick = () => {
+  state.sound = !state.sound; $("bSound").setAttribute("aria-pressed", String(state.sound));
+  if (state.sound) { sound.beep(); setTimeout(() => sound.say("Sound alarm on."), 1300); state.spokeKey = ""; }
+  else { try { speechSynthesis.cancel(); } catch (e) {} }
+  toast(state.sound ? "Spoken alarm on: it will announce grade E and F on this computer" : "Spoken alarm off");
+};
 $("bKeys").onclick = () => { const k = $("keys"), on = !k.classList.contains("on"); k.classList.toggle("on", on); $("bKeys").setAttribute("aria-expanded", String(on)); };
 $("bAck").onclick = () => {
   state.alertAck = true; $("alertbar").classList.remove("on");
@@ -875,6 +951,7 @@ document.addEventListener("keydown", e => {
   else if (k === "h") $("bHeat").click();
   else if (k === "r") openDrawer(!state.drawerOpen);
   else if (k === "t") $("bTheme").click();
+  else if (k === "a") $("bSound").click();
   else if (k === "f") { const v = $("video"); document.fullscreenElement ? document.exitFullscreen() : v.requestFullscreen && v.requestFullscreen(); }
 });
 
