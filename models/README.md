@@ -9,7 +9,8 @@ Download them and place them next to the code (or let `setup/setup.sh` copy them
 | `head320.pte` | Watch tier: finds heads on every frame | 320 × 320 | YOLOv8n fine-tuned on CrowdHuman head boxes ([notebook 01](../notebooks/01_head_training_kaggle.ipynb)), exported with [notebook 02](../notebooks/02_head_export_colab.ipynb) | ready, 29.4 ms on Pi 5 |
 | `head640.pte` | Accurate tier: near-field head detection, run tiled | 640 × 640 | Same as above, 640 px | ready, 141 ms on Pi 5 |
 | `head320_int8.pte`, `head640_int8.pte` | **Default.** INT8 versions for Arm speed | as above | Post-training quantisation, XNNPACK quantiser, Detect layer kept FP32 ([notebook 04](../notebooks/04_int8_quantise_colab.ipynb)) | ready, 21 ms / 101 ms on Pi 5, counts within 3% of FP32 |
-| `dmcount_qnrf_432x240.pte` | **Used by the hybrid** for far and packed regions, at 1 × 1 or 2 × 2 tiles | 432 × 240 | Pretrained DM-Count (UCF-QNRF), exported with [notebook 03](../notebooks/03_dmcount_export_colab.ipynb) | ready, 720 ms per tile |
+| `dmcount_qnrf_432x240_int8.pte` | **Default.** INT8 density model for far and packed regions | 432 × 240 | Post-training quantisation, final density layer FP32 ([notebook 05](../notebooks/05_dmcount_int8_colab.ipynb)) | ready, 157 ms per tile on Pi 5, 1.1% from FP32 |
+| `dmcount_qnrf_432x240.pte` | FP32 version of the density model for far and packed regions, at 1 × 1 or 2 × 2 tiles | 432 × 240 | Pretrained DM-Count (UCF-QNRF), exported with [notebook 03](../notebooks/03_dmcount_export_colab.ipynb) | ready, 720 ms per tile |
 | `dmcount_qnrf_256x144.pte` | Alternative density model, 4 × 4 tiles | 256 × 144 | as above | ready, 255 ms per tile |
 | `yolov8n_320.pte`, `yolov8n.pte` | Pretrained person (body) detector, kept as fallback | 320 / 640 | Pretrained YOLOv8n (COCO), Ultralytics ExecuTorch export | ready |
 
