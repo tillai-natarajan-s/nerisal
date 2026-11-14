@@ -291,8 +291,8 @@ class HybridAcc:
         self.h.count(np.zeros((frame_h, frame_w, 3), np.uint8))
         self.label = f"hybrid: {os.path.basename(head_model)} {grid}x{grid} + {os.path.basename(dm_model)}"
 
-    def __call__(self, img):
-        total, b, dmap, info, ms = self.h.count(img)
+    def __call__(self, img, heads_only=False):
+        total, b, dmap, info, ms = self.h.count(img, force_near=heads_only)
         return {"count": float(total), "boxes": b.numpy() if len(b) else np.zeros((0, 4)),
                 "dmap": dmap, "info": info, "ms": ms}
 
@@ -304,7 +304,7 @@ class TiledAcc:
         self.d = ETDetector(model, imgsz, conf, target, True, grid)
         self.label = self.d.label
 
-    def __call__(self, img):
+    def __call__(self, img, heads_only=False):
         b, s, c, ms = self.d(img)
         return {"count": float(len(b)), "boxes": b, "dmap": None,
                 "info": {"regime": "detector", "dm_rects": [], "head_h": None}, "ms": ms}
@@ -317,7 +317,7 @@ class MockAcc:
         self.hog = HOGDetector(1.0, "mock HOG (accurate)")
         self.label = "mock hybrid (HOG + fake density)"
 
-    def __call__(self, img):
+    def __call__(self, img, heads_only=False):
         b, s, c, ms = self.hog(img)
         h, w = img.shape[:2]
         dmap = np.zeros((h, w), np.float32)
@@ -350,11 +350,12 @@ def _acc_worker(conn, kind, kw):
         conn.send(("error", repr(e)))
         return
     while True:
-        frame = conn.recv()
-        if frame is None:
+        msg = conn.recv()
+        if msg is None:
             return
+        frame, heads_only = msg if isinstance(msg, tuple) else (msg, False)
         try:
-            r = acc(frame)
+            r = acc(frame, heads_only=heads_only)
             r["blk"] = None if r["dmap"] is None else _block_map(r["dmap"])
             r["dmap"] = None
             r["info"] = {k: v for k, v in r["info"].items() if k != "head_h"}   # functions can't be sent
@@ -374,8 +375,8 @@ class AccProcess:
         if status != "ready":
             raise SystemExit(f"accurate tier failed to start: {self.label}")
 
-    def __call__(self, frame):
-        self.conn.send(frame)
+    def __call__(self, frame, heads_only=False):
+        self.conn.send((frame, heads_only))
         r = self.conn.recv()                    # waiting here does not block the live view
         if "error" in r:
             raise RuntimeError(r["error"])
@@ -582,7 +583,7 @@ class Engine:
             frame, scene, fast_n = frame.copy(), self.src.scene, self.last_fast_n
             last_scene = scene
             try:
-                r = self.acc(frame)
+                r = self.acc(frame, heads_only=a.live_heads_only and self.src is self.live_src)
             except Exception as e:                          # keep the demo alive
                 self.event(f"accurate tier error: {e}", "alert")
                 print("accurate tier error:", e)
@@ -669,7 +670,11 @@ class Engine:
             vals[ok] = local[jj, ii]
             out["heat"] = vals
         elif self.auto is not None and self.auto.fit(w, h, time.time()) is not None:
-            out.update(self.auto_spatial(pts, (h, w)))
+            try:
+                out.update(self.auto_spatial(pts, (h, w)))
+            except Exception as e:                      # a bad fit must never stop the live view
+                self.auto.why, self.auto_bad, self.auto_dfar = f"could not measure the floor ({e})", True, None
+                out.update({"avg": None, "peak": None, "hotspot": None, "heat": None})
             if out["avg"] is None and a.area:
                 out["avg"] = total / a.area
         elif a.area:
@@ -686,20 +691,30 @@ class Engine:
         out = {}
         if len(pts):
             X, D, ok = AutoFloor.to_plane(m, pts[:, 0], pts[:, 1])
+            ok = ok & np.isfinite(X) & np.isfinite(D)
             X, D, wt = X[ok], D[ok], pts[ok, 2]
         else:
             X = D = wt = np.zeros(0)
         # the floor we can see: from the bottom of the image to just beyond the farthest person
         _, Dn, _ = AutoFloor.to_plane(m, np.array([w / 2]), np.array([h - 1]))
         d_near = float(Dn[0])
+        if not np.isfinite(d_near) or d_near < 0:
+            d_near = 0.0
         d_far = float(np.percentile(D, 98)) + 0.5 if len(D) else d_near + 6
         d_far = float(np.clip(d_far, d_near + 2, d_near + a.auto_depth))
         prev = getattr(self, "auto_dfar", None)                  # smooth the far edge too
+        if prev is not None and not np.isfinite(prev):
+            prev = None
         d_far = d_far if prev is None else prev + 0.015 * (d_far - prev)   # about 5 s at 15 fps
+        d_far = max(d_far, d_near + 2) if np.isfinite(d_far) else d_far   # smoothing can lag a new view
+        if not np.isfinite(d_far):
+            self.auto.why = "could not measure the floor in this view"
+            self.auto_bad, self.auto_dfar = True, None
+            return {"avg": None, "peak": None, "hotspot": None, "heat": None}
         self.auto_dfar = d_far
         half = (d_far * w / 2) / m["f"] * 1.2
         gx, gy = int(np.ceil(2 * half / cs)), int(np.ceil((d_far - d_near) / cs))
-        gx, gy = min(gx, 400), min(gy, 400)
+        gx, gy = int(np.clip(gx, 1, 400)), int(np.clip(gy, 1, 400))
         Xc = -half + (np.arange(gx) + 0.5) * (2 * half / gx)
         Dc = d_near + (np.arange(gy) + 0.5) * ((d_far - d_near) / gy)
         XX, DD = np.meshgrid(Xc, Dc)
@@ -828,10 +843,16 @@ class Engine:
         auto_ok = ((not self.floor.ok) and self.auto is not None and self.auto.model is not None
                    and not getattr(self, "auto_bad", False))
         sat = a.target in ("person", "head") and busy and cnt < a.sat_count
+        # severe grades need a real crowd: enough people to fill the hotspot window at grade E
+        min_crowd = a.min_crowd if a.min_crowd is not None else int(np.ceil(E_LIMIT * a.peak_win ** 2))
+        small = cnt < min_crowd
+        cap = lambda g: "C" if small and self.ORDER.get(g, -1) > 2 else g
         if avg is not None:
-            grade = self.steady("avg", fruin(avg)[0], now)
+            grade = self.steady("avg", cap(fruin(avg)[0]), now)
             action = next(act for _, g, act in FRUIN if g == grade)
-            peak_grade = self.steady("peak", fruin(peak)[0], now) if peak is not None else "-"
+            peak_grade = self.steady("peak", cap(fruin(peak)[0]), now) if peak is not None else "-"
+            if small and (self.ORDER[fruin(avg)[0]] > 2 or (peak is not None and self.ORDER[fruin(peak)[0]] > 2)):
+                action = f"{action}. Tight space, but too few people for crowd risk (fewer than {min_crowd})"
         else:
             grade, action, peak_grade = "-", "Calibrate the floor (C) or set --area to enable grades", "-"
         if sat:
@@ -889,6 +910,7 @@ class Engine:
             "calib_time": self.floor.c["time"] if self.floor.ok else None,
             "hotspot": sp["hotspot"], "heat": sp["heat"], "texture": round(tex, 3), "cpu_temp": self.temp,
             "source": self.src.desc, "upload": self.upload, "uptime": int(now - self.t0),
+            "url": self.lan_url(now),
             "hist": [[round(t - now, 1), c, round(d, 3)] for t, c, d in self.hist if now - t <= 240][::2],
             "events": list(self.events)[:15],
         }
@@ -996,6 +1018,18 @@ class Engine:
         live = [] if cur is None else [{**{k: v for k, v in cur.items() if k != "start_t"}, "end": "ongoing"}]
         return self.incidents + live
 
+    def lan_url(self, now):
+        if now - getattr(self, "url_t", 0) > 10:            # the hotspot can hand out a new address
+            self.url_t, self.url = now, f"http://{local_ip()}:{self.a.port}/"
+        return self.url
+
+    def reset_auto(self):
+        if self.auto is not None:
+            self.auto.samples.clear(); self.auto.model = None
+            self.auto.why = "re-measuring the floor for the new view"
+        self.auto_dfar, self.auto_bad = None, False
+        self.__dict__.pop("_steady", None)            # grades start fresh too
+
     def use_file(self, path, name):
         """Count an uploaded photo or video instead of the camera."""
         new = Source(path, self.a.width, self.a.height, self.a.hold)
@@ -1004,6 +1038,7 @@ class Engine:
         if old is not self.live_src:
             old.stop()
         self.ema = None
+        self.reset_auto()
         self.need_acc.set()
         self.event(f"Testing uploaded file: {name}")
 
@@ -1012,6 +1047,8 @@ class Engine:
             old, self.src, self.upload = self.src, self.live_src, None
             old.stop()
             self.ema = None
+            self.reset_auto()
+            self.need_acc.set()
             self.event("Back to the live camera")
 
     def snapshot(self):
@@ -1223,6 +1260,10 @@ def main():
     ap.add_argument("--auto-window", type=float, default=30, help="seconds of detections used to self-calibrate")
     ap.add_argument("--auto-depth", type=float, default=25, help="max depth of floor (m) used for the average")
     ap.add_argument("--auto-min-area", type=float, default=6, help="refuse self-calibration below this floor area (m²)")
+    ap.add_argument("--live-heads-only", action="store_true",
+                    help="live camera: count heads only (no density model) - for close indoor views; uploads still use the hybrid")
+    ap.add_argument("--min-crowd", type=int, default=None,
+                    help="people needed before grades above C (default: enough to fill the peak window at grade E)")
     ap.add_argument("--peak-win", type=float, default=3.0, help="peak density window side in metres")
     ap.add_argument("--line", type=float, default=0.0, help="counting line at this fraction of height, 0=off")
     ap.add_argument("--esc-count", type=int, default=8, help="escalate when the watch tier sees this many")
@@ -1250,7 +1291,7 @@ def main():
     ap.add_argument("--mock", action="store_true", help="test without ExecuTorch (OpenCV HOG)")
     a = ap.parse_args()
 
-    for k in ("fast_model", "acc_model"):              # prefer the INT8 build when it is here
+    for k in ("fast_model", "acc_model", "dm"):        # prefer the INT8 build when it is here
         m = getattr(a, k)
         q = m.replace(".pte", "_int8.pte")
         if m and not m.endswith("_int8.pte") and os.path.exists(q) and not a.fp32:

@@ -226,9 +226,9 @@ class HybridCounter:
     at least one region needs it."""
 
     def __init__(self, det, dm_model, dm_size=(432, 240), grids=(1, 2), cells=8,
-                 hthr=0.015, ht=10.0, conf=0.25, det_grid=3, close_frac=0.15):
+                 hthr=0.015, ht=10.0, conf=0.25, det_grid=3, close_frac=0.15, dm_min=0.0, far_frac=0.0):
         self.det, self.cells, self.hthr, self.ht, self.conf = det, cells, hthr, ht, conf
-        self.close_frac = close_frac
+        self.close_frac, self.dm_min, self.far_frac = close_frac, dm_min, far_frac
         self.det_grid, self.grids, self.dm_w = det_grid, tuple(grids), dm_size[0]
         method = Runtime.get().load_program(dm_model).load_method("forward")
         self.dm = {g: DMCounter(None, dm_size, g, method=method) for g in self.grids}
@@ -253,8 +253,9 @@ class HybridCounter:
         lo, hi = max(2.0, float(np.percentile(bh, 5)) * 0.5), float(np.percentile(bh, 95)) * 1.5
         return lambda y: float(np.clip(co[0] + co[1] * y, lo, max(lo, hi)))
 
-    def count(self, img):
-        """Returns total, kept boxes (torch), full-frame density map, info dict, ms."""
+    def count(self, img, force_near=False):
+        """Returns total, kept boxes (torch), full-frame density map, info dict, ms.
+        force_near=True counts heads only (no density model), e.g. for a close indoor camera."""
         t0 = time.perf_counter()
         h, w = img.shape[:2]
         b, s, c, _ = self.det.detect(img, tiles=True, grid=self.det_grid)
@@ -267,7 +268,10 @@ class HybridCounter:
 
         # close-up scene (large heads everywhere): the density model would read walls and posters as
         # distant crowd, so count only what the detector sees
-        close_up = len(bh) > 0 and float(np.median(bh)) / w >= self.close_frac
+        close_up = force_near or (len(bh) > 0 and float(np.median(bh)) / w >= self.close_frac)
+        # no small (distant) heads anywhere: nothing is far away, so the density model has nothing to add
+        if len(bh) >= 3 and self.far_frac > 0 and float(np.percentile(bh, 10)) / w >= self.far_frac:
+            close_up = True
         ys = np.linspace(0, h, self.cells + 1).astype(int)
         xs = np.linspace(0, w, self.cells + 1).astype(int)
         maps, dmap = {}, np.zeros((h, w), np.float32)
@@ -287,6 +291,8 @@ class HybridCounter:
                 if g not in maps:
                     maps[g] = self.dm[g].count(img)[1]
                 d = float(maps[g][y0:y1, x0:x1].sum())
+                if d < self.dm_min:                       # faint density = clutter (desks, posters), not a crowd
+                    d = 0.0
                 if nh > d:                                # never below what we can see
                     total += nh
                     for k in np.where(m)[0]:
